@@ -37,7 +37,7 @@ SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD")
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT"))
 WAIT_TIME = int(os.getenv("WAIT_TIME", 300))
-SENDER_NAME = os.getenv("EMAIL_NAME", "MailApp")
+SENDER_NAME = os.getenv("EMAIL_NAME")
 
 app.config.update(
     MAIL_SERVER=SMTP_SERVER,
@@ -185,7 +185,7 @@ def index():
         raw_html = request.form['ckeditor']
         message = remove_tracking_pixels(raw_html)
         from_email = request.form.get('from_email', SENDER_EMAIL)
-        from_display = (SENDER_NAME, from_email)
+        from_display = (SENDER_NAME, from_email) # For user name show
 
         cc_raw = request.form.get('cc_emails', '')
         cc_emails = [c.strip() for c in cc_raw.split(',') if c.strip()]
@@ -351,4 +351,4 @@ def uploaded_file(filename):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
