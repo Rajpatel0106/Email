@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Send Email</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <script src="https://cdn.ckeditor.com/ckeditor5/36.0.1/classic/ckeditor.js"></script>
+  <link href="https://unpkg.com/filepond@^4/dist/filepond.css" rel="stylesheet" />
+  <script src="https://unpkg.com/filepond@^4/dist/filepond.js"></script>
+  <script src="https://unpkg.com/filepond-plugin-file-encode/dist/filepond-plugin-file-encode.js"></script>
+  <script src="https://unpkg.com/filepond-plugin-file-validate-size/dist/filepond-plugin-file-validate-size.js"></script>
+</head>
+<style>
+  body {
+     font-family: Arial, sans-serif;
+     background-color: gray;
+     margin: 0;
+     padding: 20px;
+  }
+  .container {
+     max-width: 800px;
+     margin: 0 auto;
+     padding: 30px;
+     background-color: lightyellow;
+     border-radius: 8px;
+     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  }
+  label {
+     font-weight: bold;
+     margin-top: 10px;
+     display: block;
+  }
+  input, textarea {
+     width: 100%;
+     padding: 10px;
+     margin-top: 5px;
+     border: 1px solid #ccc;
+     border-radius: 4px;
+  }
+  .submit-btn {
+     margin-top: 20px;
+     background: #28a745;
+     color: white;
+     padding: 12px;
+     border: none;
+     width: 100%;
+     font-size: 16px;
+     cursor: pointer;
+     border-radius: 4px;
+  }
+  .alert {
+     margin: 10px 0;
+     padding: 10px;
+     border-radius: 4px;
+  }
+  .success { background: #d4edda; color: #155724; }
+  .danger { background: #f8d7da; color: #721c24; }
+  .info    { background: #d1ecf1; color: #0c5460; }
+</style>
+<body>
+<div class="container">
+  <h1>Email Sending App</h1>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert {{ category | lower }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" enctype="multipart/form-data">
+    <label for="from_email">From:</label>
+    <input type="text" name="from_email" id="from_email" value="{{ sender_email }}">
+
+    <label for="emails">To:</label>
+    <input type="text" name="emails" id="emails" placeholder="example@domain.com, second@domain.com">
+
+    <label for="cc_emails">CC (comma separated):</label>
+    <input type="text" name="cc_emails" id="cc_emails" placeholder="optional">
+
+    <label for="recipients">Or upload CSV:</label>
+    <input type="file" name="recipients" id="recipients" accept=".csv">
+
+    <label for="subject">Subject:</label>
+    <input type="text" name="subject" id="subject">
+
+    <label for="ckeditor" id="ckeditor-label">Message:</label>
+    <textarea name="ckeditor" id="ckeditor" aria-labelledby="ckeditor-label"></textarea>
+
+    <label>Attachments:
+      <input type="file" name="file" id="fileUpload" multiple />
+    </label>
+
+    <label for="wait_time">Delay between batches (seconds):</label>
+    <input type="number" name="wait_time" id="wait_time" value="0">
+
+    <button type="submit" class="submit-btn">Send Emails</button>
+  </form>
+</div>
+
+<script>
+  let editorInstance;
+  ClassicEditor.create(document.querySelector('#ckeditor'))
+    .then(editor => editorInstance = editor)
+    .catch(err => console.error('CKEditor error:', err));
+
+  FilePond.registerPlugin(FilePondPluginFileEncode, FilePondPluginFileValidateSize);
+  FilePond.create(document.querySelector('#fileUpload'), {
+    allowMultiple: true,
+    server: {
+      process: '/upload-image',
+      revert: null
+    }
+  });
+</script>
+<script>
+  // MongoDB connection check
+  fetch("/api/mongo-status")
+    .then(response => response.json())
+    .then(data => {
+      if (data.status === "connected") {
+        console.log("✅ MongoDB is connected.");
+      } else {
+        console.error("❌ MongoDB connection failed:", data.message);
+      }
+    })
+    .catch(err => console.error("❌ Failed to check MongoDB status:", err));
+
+  // ✅ Search all alerts and look for MongoDB upload messages
+  document.querySelectorAll('.alert').forEach(alert => {
+    const text = alert.textContent.trim();
+    if (text.startsWith("MONGO_UPLOAD::")) {
+      const files = text.replace("MONGO_UPLOAD::", "").split(',');
+      console.log("📦 Files uploaded to MongoDB:", files);
+    }
+  });
+</script>
+</body>
+</html>
+
