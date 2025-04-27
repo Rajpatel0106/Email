@@ -54,22 +54,6 @@ app.config.update(
 app.config['SESSION_TYPE'] = 'filesystem'
 
 
-
-
-# MONGO_USER = os.getenv("MONGO_USER")
-# MONGO_PASS = quote_plus(os.getenv("MONGO_PASS"))  # encode special chars like @ or $
-# MONGO_CLUSTER = os.getenv("MONGO_CLUSTER")
-# MONGO_DBNAME = os.getenv("MONGO_DBNAME")
-# MONGO_APPNAME = os.getenv("MONGO_APPNAME", "MyApp")
-# MONGO_URL=os.getenv("MONGO_URL")
-#
-#
-# client = MongoClient(MONGO_URL)
-# db = client[MONGO_DBNAME]            # you can change the DB name if you like
-# fs = gridfs.GridFS(db, collection="attachments")  # now: attachments.files and attachments.chunks
-# print("Uploading to MongoDB DB:", db.name)
-
-
 MEMORY_FILE = 'memory.json'
 
 def load_users():
@@ -101,29 +85,6 @@ def update_user(updated_user):
             users[i] = updated_user
             save_users(users)
             return
-
-
-
-# @app.route("/files")
-# def list_files():
-#     files = fs.find()
-#     return render_template("files.html", files=files)
-#
-# @app.route("/api/mongo-status")
-# def mongo_status():
-#     try:
-#         db.list_collection_names()  # simple check
-#         return jsonify({"status": "connected"})
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": str(e)})
-#
-# @app.route("/test-mongo")
-# def test_mongo():
-#     try:
-#         db.list_collection_names()  # simple check
-#         return "✅ MongoDB is connected!"
-#     except Exception as e:
-#         return f"❌ MongoDB error: {e}"
 
 mail = Mail(app)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'zip', 'avif', 'ico', 'heic', 'webp', 'txt', 'xlsx', 'csv', 'pptx'}
@@ -495,12 +456,6 @@ def index():
 
                                 file.save(filepath)
 
-                                # Upload to MongoDB if the file doesn't already exist in the collection
-                                # if not fs.exists({"filename": filename}):
-                                #     with open(filepath, 'rb') as f:
-                                #         fs.put(f, filename=filename)
-                                #     uploaded_to_mongo.append(filename)
-
                                 uploaded_files = []
 
                                 for file in attachments:
@@ -524,9 +479,6 @@ def index():
                         conn.send(msg)
                         taken = time.time() - start
                         flash(f"✅ Sent to: {', '.join(valid_to + valid_cc)}", 'success')
-
-                        # if uploaded_to_mongo:
-                        #     flash(f"MONGO_UPLOAD::{','.join(uploaded_to_mongo)}", "mongo_status")
 
                         for vt in valid_to:
                             save_report(timestamp, from_email, vt, '', final_subject, message, 'Success', '', taken)
