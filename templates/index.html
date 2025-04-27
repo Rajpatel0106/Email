@@ -49,6 +49,20 @@
      cursor: pointer;
      border-radius: 4px;
   }
+{#
+.download-btn {
+   margin-top: 20px;
+   background: #007bff;
+   color: white;
+   padding: 10px;
+   border: blue;
+   width: 20%;
+   font-size: 15px;
+   cursor: pointer;
+   border-radius: 10px;
+}
+#}
+
   .alert {
      margin: 10px 0;
      padding: 10px;
@@ -69,6 +83,9 @@
       {% endfor %}
     {% endif %}
   {% endwith %}
+  <form action="/download-report" method="get" style="text-align: center; margin-top: 100px;">
+  <button type="submit" class="submit-btn", style="background: #007bff;">⬇️ Report</button>
+  </form>
 
   <form method="POST" enctype="multipart/form-data">
     <label for="from_email">From:</label>
@@ -92,7 +109,9 @@
     <label>Attachments:
       <input type="file" name="file" id="fileUpload" multiple />
     </label>
-
+<!--<div style="margin-top: 20px;">-->
+<!--  <a href="/files" target="_blank" style="color: blue; text-decoration: underline;">🔍 View Uploaded Files</a>-->
+<!--</div>-->
     <label for="wait_time">Delay between batches (seconds):</label>
     <input type="number" name="wait_time" id="wait_time" value="0">
 
@@ -117,8 +136,8 @@
 </script>
 <script>
   // MongoDB connection check
-  fetch("/api/mongo-status")
-    .then(response => response.json())
+<!--  fetch("/api/mongo-status")-->
+<!--    .then(response => response.json())-->
     .then(data => {
       if (data.status === "connected") {
         console.log("✅ MongoDB is connected.");
@@ -131,7 +150,7 @@
   // ✅ Search all alerts and look for MongoDB upload messages
   document.querySelectorAll('.alert').forEach(alert => {
     const text = alert.textContent.trim();
-    if (text.startsWith("MONGO_UPLOAD::")) {
+<!--    if (text.startsWith("MONGO_UPLOAD::")) {-->
       const files = text.replace("MONGO_UPLOAD::", "").split(',');
       console.log("📦 Files uploaded to MongoDB:", files);
     }

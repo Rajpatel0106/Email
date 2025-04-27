@@ -4,20 +4,20 @@ import ssl
 import csv
 import time
 import uuid
-import gridfs
+import json
+import random
 import secrets
 import mimetypes
 import dns.resolver
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from pymongo import MongoClient
 from flask_ckeditor import CKEditor
-from urllib.parse import quote_plus
 from flask_mail import Mail, Message
 from email.mime.image import MIMEImage
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, redirect, flash, jsonify, send_from_directory
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, session, send_file, request, redirect, flash, jsonify, send_from_directory
 
 
 
@@ -51,45 +51,79 @@ app.config.update(
     CKEDITOR_SERVE_LOCAL=True,
     CKEDITOR_HEIGHT=400
 )
+app.config['SESSION_TYPE'] = 'filesystem'
 
 
-uri = "mongodb+srv://Rajkachhadiya:<db_password>@cluster0.jmquj1y.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = quote_plus(os.getenv("MONGO_PASS"))  # encode special chars like @ or $
-MONGO_CLUSTER = os.getenv("MONGO_CLUSTER")
-MONGO_DBNAME = os.getenv("MONGO_DBNAME")
-MONGO_APPNAME = os.getenv("MONGO_APPNAME", "MyApp")
 
-mongo_uri = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_CLUSTER}/?retryWrites=true&w=majority&appName={MONGO_APPNAME}"
-client = MongoClient(mongo_uri)
-db = client[MONGO_DBNAME]
-fs = gridfs.GridFS(db)
+# MONGO_USER = os.getenv("MONGO_USER")
+# MONGO_PASS = quote_plus(os.getenv("MONGO_PASS"))  # encode special chars like @ or $
+# MONGO_CLUSTER = os.getenv("MONGO_CLUSTER")
+# MONGO_DBNAME = os.getenv("MONGO_DBNAME")
+# MONGO_APPNAME = os.getenv("MONGO_APPNAME", "MyApp")
+# MONGO_URL=os.getenv("MONGO_URL")
+#
+#
+# client = MongoClient(MONGO_URL)
+# db = client[MONGO_DBNAME]            # you can change the DB name if you like
+# fs = gridfs.GridFS(db, collection="attachments")  # now: attachments.files and attachments.chunks
+# print("Uploading to MongoDB DB:", db.name)
 
-db = client["Cluster0"]            # you can change the DB name if you like
-fs = gridfs.GridFS(db)              # GridFS handles large files
 
-@app.route("/files")
-def list_files():
-    return "<br>".join([file.filename for file in fs.find()])
+MEMORY_FILE = 'memory.json'
 
-@app.route("/api/mongo-status")
-def mongo_status():
+def load_users():
     try:
-        db.list_collection_names()  # simple check
-        return jsonify({"status": "connected"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
+        with open('users.json', 'r') as file:
+            # Attempt to load JSON data
+            users = json.load(file)
+            return users
+    except json.JSONDecodeError:
+        print("Error: Invalid JSON format in users.json")
+        return []  # Return an empty list if JSON is invalid
+    except FileNotFoundError:
+        print("Error: users.json file not found. Initializing with an empty list.")
+        return []  # Return an empty list if file is missing
 
 
-@app.route("/test-mongo")
-def test_mongo():
-    try:
-        db.list_collection_names()  # simple check
-        return "✅ MongoDB is connected!"
-    except Exception as e:
-        return f"❌ MongoDB error: {e}"
+def save_users(users):
+    with open(MEMORY_FILE, 'w') as f:
+        json.dump({'users': users}, f, indent=2)
 
+def get_user(email):
+    users = load_users()
+    return next((u for u in users if u['email'] == email), None)
+
+def update_user(updated_user):
+    users = load_users()
+    for i, u in enumerate(users):
+        if u['email'] == updated_user['email']:
+            users[i] = updated_user
+            save_users(users)
+            return
+
+
+
+# @app.route("/files")
+# def list_files():
+#     files = fs.find()
+#     return render_template("files.html", files=files)
+#
+# @app.route("/api/mongo-status")
+# def mongo_status():
+#     try:
+#         db.list_collection_names()  # simple check
+#         return jsonify({"status": "connected"})
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)})
+#
+# @app.route("/test-mongo")
+# def test_mongo():
+#     try:
+#         db.list_collection_names()  # simple check
+#         return "✅ MongoDB is connected!"
+#     except Exception as e:
+#         return f"❌ MongoDB error: {e}"
 
 mail = Mail(app)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'zip', 'avif', 'ico', 'heic', 'webp', 'txt', 'xlsx', 'csv', 'pptx'}
@@ -99,6 +133,20 @@ REPORTS_DIR = "reports"
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
 report_filename = os.path.join(REPORTS_DIR, f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+
+def process_csv(csv_file, ui_cc, ui_subject, ui_message):
+    emails = []
+    with open(csv_file, 'r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            email_data = {
+                'email': row['email'],
+                'cc': row['cc'] if row['cc'] else ui_cc,
+                'subject': row['subject'] if row['subject'] else ui_subject,
+                'message': row['message'] if row['message'] else ui_message
+            }
+            emails.append(email_data)
+    return emails
 
 
 def allowed_file(filename):
@@ -174,18 +222,163 @@ def save_report(timestamp, sender, to, cc, subject, html_message, status, reason
 
 def get_emails_from_csv(path):
     with open(path, newline='', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        return [(row[0].strip(), row[1].strip() if len(row) > 1 else None) for row in reader if row]
+        reader = csv.DictReader(f)
+        result = []
+        for row in reader:
+            result.append({
+                'email': row.get('email', '').strip(),
+                'cc': row.get('cc', '').strip(),
+                'subject': row.get('subject', '').strip(),
+                'message': row.get('message', '').strip()
+            })
+        return result
 
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        name = request.form['name'].strip()
+        email = request.form['email'].strip().lower()
+        password = request.form['password']
+        confirm = request.form['confirm_password']
+
+        if get_user(email):
+            flash("Mail Address already exists", 'danger')
+            return redirect('/signup')
+
+        if password != confirm:
+            flash("Passwords do not match", 'danger')
+            return redirect('/signup')
+
+        hashed_pw = generate_password_hash(password)
+        users = load_users()
+        users.append({
+            "name": name,
+            "email": email,
+            "password_hash": hashed_pw
+        })
+        save_users(users)
+
+        flash("Signup successful! Please login.", 'success')
+        return redirect('/login')
+
+    return render_template("signup.html")
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email'].strip().lower()
+        password = request.form['password']
+
+        user = get_user(email)
+        if not user or not check_password_hash(user['password_hash'], password):
+            flash("Mail ID and password mismatch", 'danger')
+            return redirect('/login')
+
+        session['user'] = user['email']
+        flash("Login successful", 'success')
+        return redirect('/')
+
+    return render_template("login.html")
+
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    flash("Logged out.", "info")
+    return redirect('/login')
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email'].strip().lower()
+        user = get_user(email)
+        if not user:
+            flash("Mail ID does not exist", "danger")
+            return redirect('/forgot-password')
+
+        otp = str(random.randint(100000, 999999))
+        expiry = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+        user['otp'] = otp
+        user['otp_expiry'] = expiry
+        update_user(user)
+
+        msg = Message("Password Reset OTP", recipients=[email])
+        msg.body = f"Your OTP for password reset is: {otp}"
+        mail.send(msg)
+
+        flash("OTP sent to your email.", "info")
+        session['otp_email'] = email
+        return redirect('/reset-password')
+
+    return render_template("forgot_password.html")
+
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    email = session.get('otp_email')
+    if not email:
+        flash("Session expired. Try again.", "danger")
+        return redirect('/forgot-password')
+
+    user = get_user(email)
+    if not user:
+        flash("Mail ID does not exist", "danger")
+        return redirect('/forgot-password')
+
+    if request.method == 'POST':
+        otp = request.form['otp'].strip()
+        new_pw = request.form['new_password']
+        confirm_pw = request.form['confirm_password']
+
+        if otp != user.get('otp'):
+            flash("Invalid OTP", "danger")
+            return redirect('/reset-password')
+
+        expiry_str = user.get('otp_expiry')
+        if not expiry_str or datetime.utcnow() > datetime.fromisoformat(expiry_str):
+            flash("OTP expired. Request a new one.", "danger")
+            return redirect('/forgot-password')
+
+        if new_pw != confirm_pw:
+            flash("Passwords do not match", "danger")
+            return redirect('/reset-password')
+
+        user['password_hash'] = generate_password_hash(new_pw)
+        user.pop('otp', None)
+        user.pop('otp_expiry', None)
+        update_user(user)
+
+        session.pop('otp_email', None)
+        flash("Password reset successful! Please login.", "success")
+        return redirect('/login')
+
+    return render_template("reset_password.html")
+
+
+
+
+@app.route("/test-attachment-upload")
+def test_attachment_upload(fs=None):
+    from io import BytesIO
+    try:
+        file_id = fs.put(BytesIO(b"Test attachment content"), filename="sample_test.txt")
+        print(f"Saved file with _id: {file_id}")
+        return f"✅ Uploaded! ID: {file_id}"
+    except Exception as e:
+        return f"❌ Upload failed: {e}"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    if 'user' not in session:
+        return redirect('/login')
+
     if request.method == 'POST':
         form_subject = request.form['subject'].strip()
         raw_html = request.form['ckeditor']
         message = remove_tracking_pixels(raw_html)
         from_email = request.form.get('from_email', SENDER_EMAIL)
-        from_display = (SENDER_NAME, from_email) # For user name show
+        from_display = (SENDER_NAME, from_email) # For username show
 
         cc_raw = request.form.get('cc_emails', '')
         cc_emails = [c.strip() for c in cc_raw.split(',') if c.strip()]
@@ -201,13 +394,22 @@ def index():
             emails_data = get_emails_from_csv("emails.csv")
         else:
             inline_emails = request.form['emails']
-            emails_data = [(e.strip(), form_subject) for e in inline_emails.split(',') if e.strip()]
+            emails_data = [{
+                'email': e.strip(),
+                'cc': '',
+                'subject': form_subject,
+                'message': message
+            } for e in inline_emails.split(',') if e.strip()]
 
         invalid_emails = load_invalid_emails()
         batch_counter = 0
-
         with mail.connect() as conn:
-            for i, (to_email, subj) in enumerate(emails_data):
+            for i, row in enumerate(emails_data):
+                to_email = row.get('email', '').strip()
+                subj = row.get('subject') or form_subject
+                msg_body = row.get('message') or message
+                cc_line = row.get('cc') or cc_raw
+                cc_emails = [c.strip() for c in cc_line.split(',') if c.strip()]
                 start = time.time()
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 final_subject = subj or form_subject or ''
@@ -242,7 +444,20 @@ def index():
                             save_invalid_email(cc, reason)
                             invalid_cc.append((cc, reason))
 
-                # Send if valid TO or CC
+                # Validate CC
+                for cc in cc_emails:
+                    if cc in invalid_emails:
+                        invalid_cc.append((cc, 'Previously invalid'))
+                    else:
+                        valid, reason = is_valid_email(cc)
+                        if valid:
+                            valid_cc.append(cc)
+                            remove_invalid_email(cc)
+                        else:
+                            save_invalid_email(cc, reason)
+                            invalid_cc.append((cc, reason))
+
+                # Send it if valid TO or CC
                 if valid_to or valid_cc:
                     try:
                         msg = Message(
@@ -280,10 +495,26 @@ def index():
 
                                 file.save(filepath)
 
-                                if not fs.exists({"filename": filename}):
-                                    with open(filepath, 'rb') as f:
-                                        fs.put(f, filename=filename)
-                                    uploaded_to_mongo.append(filename)
+                                # Upload to MongoDB if the file doesn't already exist in the collection
+                                # if not fs.exists({"filename": filename}):
+                                #     with open(filepath, 'rb') as f:
+                                #         fs.put(f, filename=filename)
+                                #     uploaded_to_mongo.append(filename)
+
+                                uploaded_files = []
+
+                                for file in attachments:
+                                    if allowed_file(file.filename):
+                                        filename = secure_filename(file.filename)
+                                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+                                        file.save(filepath)
+                                        uploaded_files.append(filename)
+
+                                        with open(filepath, 'rb') as f:
+                                            data = f.read()
+                                            mime_type = mimetypes.guess_type(filepath)[0] or 'application/octet-stream'
+                                            msg.attach(filename, mime_type, data)
 
                                 with open(filepath, 'rb') as f:
                                     data = f.read()
@@ -294,8 +525,8 @@ def index():
                         taken = time.time() - start
                         flash(f"✅ Sent to: {', '.join(valid_to + valid_cc)}", 'success')
 
-                        if uploaded_to_mongo:
-                            flash(f"MONGO_UPLOAD::{','.join(uploaded_to_mongo)}", "mongo_status")
+                        # if uploaded_to_mongo:
+                        #     flash(f"MONGO_UPLOAD::{','.join(uploaded_to_mongo)}", "mongo_status")
 
                         for vt in valid_to:
                             save_report(timestamp, from_email, vt, '', final_subject, message, 'Success', '', taken)
@@ -327,7 +558,7 @@ def index():
                     flash("⌛ Waiting before next batch...", 'info')
                     time.sleep(wait_time)
 
-        flash("🎉 Processing Complete", 'success')
+        flash(f"🎉 Processing Complete{report_filename}", 'success')
         return redirect('/')
 
     return render_template('index.html', sender_email=SENDER_EMAIL, wait_time=WAIT_TIME)
@@ -349,6 +580,20 @@ def upload_image():
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+@app.route('/download-report')
+def download_report():
+    try:
+        return send_file(report_filename, as_attachment=True)
+    except Exception as e:
+        flash(f"❌ Error downloading report: {e}", "danger")
+        return redirect('/')
+
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
+
+# if __name__ == '__main__':
+#     app.run(debug=True)
+
+
+

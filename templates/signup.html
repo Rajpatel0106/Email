@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sign Up</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(to right, #8e9eab, #eef2f3);
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    form {
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    label {
+      font-weight: 600;
+      margin-top: 10px;
+      display: block;
+      color: #555;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-top: 6px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    input:focus {
+      border-color: #5b9bd5;
+      box-shadow: 0 0 5px rgba(91, 155, 213, 0.5);
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #5b9bd5;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      margin-top: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #4a8bc2;
+    }
+
+    .flash-message {
+      color: red;
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    .links {
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    .links a {
+      color: #5b9bd5;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .links a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <form method="POST">
+    <h2>Sign Up</h2>
+    <label>Name:</label>
+    <input name="name" required>
+    <label>Email:</label>
+    <input name="email" type="email" required>
+    <label>Password:</label>
+    <input name="password" type="password" required>
+    <label>Confirm Password:</label>
+    <input name="confirm_password" type="password" required>
+    <button type="submit">Sign Up</button>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="flash-message">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="links">
+      <a href="/login">Already have an account?</a>
+    </div>
+  </form>
+</body>
+</html>

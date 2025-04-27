@@ -1,0 +1,9 @@
+{
+  "users": [
+    {
+      "name": "Raj Kachhadiya",
+      "email": "rajkachhadiya2005@gmail.com",
+      "password_hash": "scrypt:32768:8:1$ITxomVEyfKiaYtnN$e0103d18e60445ba66fe4d3a0d255954fd4b5b3329674f3126757f775f88f5613a79238d9357371d8bac1de252344da3333099d8c8f9500f3a4dbfb5abd7fa3f"
+    }
+  ]
+}
