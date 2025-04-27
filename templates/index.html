@@ -62,7 +62,6 @@
    border-radius: 10px;
 }
 #}
-
   .alert {
      margin: 10px 0;
      padding: 10px;
@@ -75,7 +74,6 @@
 <body>
 <div class="container">
   <h1>Email Sending App</h1>
-
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {% for category, message in messages %}
@@ -86,39 +84,27 @@
   <form action="/download-report" method="get" style="text-align: center; margin-top: 100px;">
   <button type="submit" class="submit-btn", style="background: #007bff;">⬇️ Report</button>
   </form>
-
   <form method="POST" enctype="multipart/form-data">
     <label for="from_email">From:</label>
     <input type="text" name="from_email" id="from_email" value="{{ sender_email }}">
-
     <label for="emails">To:</label>
     <input type="text" name="emails" id="emails" placeholder="example@domain.com, second@domain.com">
-
     <label for="cc_emails">CC (comma separated):</label>
     <input type="text" name="cc_emails" id="cc_emails" placeholder="optional">
-
     <label for="recipients">Or upload CSV:</label>
     <input type="file" name="recipients" id="recipients" accept=".csv">
-
     <label for="subject">Subject:</label>
     <input type="text" name="subject" id="subject">
-
     <label for="ckeditor" id="ckeditor-label">Message:</label>
     <textarea name="ckeditor" id="ckeditor" aria-labelledby="ckeditor-label"></textarea>
-
     <label>Attachments:
       <input type="file" name="file" id="fileUpload" multiple />
     </label>
-<!--<div style="margin-top: 20px;">-->
-<!--  <a href="/files" target="_blank" style="color: blue; text-decoration: underline;">🔍 View Uploaded Files</a>-->
-<!--</div>-->
     <label for="wait_time">Delay between batches (seconds):</label>
     <input type="number" name="wait_time" id="wait_time" value="0">
-
     <button type="submit" class="submit-btn">Send Emails</button>
   </form>
 </div>
-
 <script>
   let editorInstance;
   ClassicEditor.create(document.querySelector('#ckeditor'))
@@ -136,4 +122,3 @@
 </script>
 </body>
 </html>
-

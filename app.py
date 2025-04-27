@@ -6,6 +6,7 @@ import time
 import uuid
 import json
 import random
+import string
 import secrets
 import mimetypes
 import dns.resolver
@@ -16,19 +17,16 @@ from flask_ckeditor import CKEditor
 from flask_mail import Mail, Message
 from email.mime.image import MIMEImage
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, session, send_file, request, url_for
+from flask import Flask, render_template, session, send_file, request
 from flask import current_app, flash, jsonify, send_from_directory, redirect
-
 
 
 # Load environment variables
 load_dotenv()
 ssl_context = ssl.create_default_context()
-
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(16)
+app.secret_key = secrets.token_hex(16) #app secret key is every new session it will generate a new key
 ckeditor = CKEditor(app)
-
 
 # Config from .env
 SENDER_EMAIL = os.getenv("EMAIL_SENDER")
@@ -53,7 +51,6 @@ app.config.update(
 )
 app.config['SESSION_TYPE'] = 'filesystem'
 
-
 USER_FILE  = 'users.json'
 
 def load_users():
@@ -67,7 +64,6 @@ def load_users():
         print("Error decoding JSON. File might be corrupted.")
         users = []
     return users
-
 
 def save_users(users):
     try:
@@ -83,7 +79,6 @@ def get_all_users():
         for row in reader:
             users.append(row)
     return users
-
 
 def get_user(email):
     users = load_users()
@@ -119,7 +114,6 @@ def process_csv(csv_file, ui_cc, ui_subject, ui_message):
             }
             emails.append(email_data)
     return emails
-
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -229,7 +223,6 @@ def signup():
             return redirect('/signup')
 
         users = read_users()
-
         # Check if email already exists
         if any(user['email'] == email for user in users):
             flash("Mail Address already exists", "error")
@@ -244,8 +237,6 @@ def signup():
         return redirect('/login')
 
     return render_template('signup.html')
-
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -267,7 +258,6 @@ def login():
 
     return render_template('login.html')
 
-
 @app.route('/logout')
 def logout():
     session.pop('user', None)
@@ -286,74 +276,114 @@ def send_otp_email(email, otp):
     with app.app_context():
         mail.send(msg)
 
-
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
-        email = request.form['email']
-        print(f"Requested email: {email}")
+        email = request.form['email'].strip()
 
-        # Load users from the JSON file
-        users = load_users()
-        print(f"Loaded users: {users}")
+        if not email:
+            flash('Please enter your email.', 'error')
+            return redirect('/forgot-password')
 
-        # Check if the email exists in the list of users
-        user = next((user for user in users if user['email'].strip().lower() == email.strip().lower()), None)
-        if user:
-            print(f"User found: {user}")
-            otp = generate_otp()
-            send_otp_email(user['email'], otp)
-            session['verification_code'] = otp
-            session['reset_email'] = user['email']
-            return redirect(url_for('verify_code'))
-        else:
-            print("Email not found in the system")
-            flash("Email not found in the system", "error")
-            return redirect(url_for('forgot_password'))
+        try:
+            with open('users.json', 'r') as f:
+                users = json.load(f)
+        except FileNotFoundError:
+            users = []
+
+        # Check if email exists
+        user_found = False
+        for user in users:
+            if user['email'] == email:
+                user_found = True
+                break
+
+        if not user_found:
+            flash('Email does not exist.', 'error')
+            return redirect('/forgot-password')
+
+        # Email exists, generate OTP
+        otp = ''.join(random.choices(string.digits, k=6))
+        session['otp'] = otp
+        session['reset_email'] = email
+        print("forgot ses:", session)
+
+        # Send OTP via email
+        try:
+            msg = Message('Password Reset OTP', sender=os.getenv('EMAIL_SENDER'), recipients=[email])
+            msg.body = f'Your OTP for password reset is: {otp}'
+            mail.send(msg)
+        except Exception as e:
+            flash(f'Error sending email: {str(e)}', 'error')
+            return redirect('/forgot-password')
+
+        flash('OTP has been sent to your email.', 'success')
+        return redirect('/verify_code')
 
     return render_template('forgot_password.html')
 
-
-
 @app.route('/verify_code', methods=['GET', 'POST'])
 def verify_code():
+    if 'otp' not in session or 'reset_email' not in session:
+        flash('Session expired. Please request OTP again.', 'error')
+        return redirect('/forgot-password')
+
     if request.method == 'POST':
-        code = request.form['code']
-
-        # Validate the OTP entered by the user
-        if code != session.get('verification_code'):
-            flash("Invalid code. Try again.", "error")
+        entered_otp = request.form['otp'].strip()
+        if entered_otp == session['otp']:
+            flash('OTP verified successfully! Now set your new password.', 'success')
+            return redirect('/reset_password')
+        else:
+            flash('Incorrect OTP. Please try again.', 'error')
             return redirect('/verify_code')
-
-        return redirect('/reset_password')
 
     return render_template('verify_code.html')
 
-
 @app.route('/reset_password', methods=['GET', 'POST'])
 def reset_password():
+    # Check if email exists in session
+    if 'reset_email' not in session:
+        flash('User not found.', 'error')
+        return redirect('/forgot_password')
+
     if request.method == 'POST':
         new_password = request.form['new_password']
         confirm_password = request.form['confirm_password']
 
+        # Check if new password matches confirm password
         if new_password != confirm_password:
-            flash("Passwords do not match", "error")
+            flash('Passwords do not match.', 'error')
             return redirect('/reset_password')
 
-        email = session.get('reset_email')
-        users = read_users()
+        email = session['reset_email']
 
-        for user in users:
-            if user['email'] == email:
-                user['password'] = new_password
+        try:
+            with open('users.json', 'r') as f:
+                users = json.load(f)
+        except FileNotFoundError:
+            users = []
 
-        write_users(users)
+        # Find the user by email and update the password
+        user = next((user for user in users if user['email'] == email), None)
 
-        flash("Password reset successful! Please login.", "success")
-        return redirect('/login')
+        if user:
+            user['password'] = new_password  # Update password
+
+            # Save the updated user list back to the file
+            with open('users.json', 'w') as f:
+                json.dump(users, f, indent=4)
+
+            # Clear session variables for security
+            session.pop('otp', None)
+            session.pop('reset_email', None)
+
+            flash('Password successfully reset!', 'success')
+            return redirect('/login')
+        else:
+            flash('User not found.', 'error')
+            return redirect('/reset_password')
 
     return render_template('reset_password.html')
-
 
 @app.route("/test-attachment-upload", methods=['POST'])
 def test_attachment_upload():
@@ -383,7 +413,6 @@ def index():
         from_display = (SENDER_NAME, from_email) # For username show
 
         cc_raw = request.form.get('cc_emails', '')
-        cc_emails = [c.strip() for c in cc_raw.split(',') if c.strip()]
         wait_input = int(request.form.get('wait_time', 0))
         wait_time = WAIT_TIME if wait_input == 0 else wait_input
 
@@ -474,8 +503,6 @@ def index():
                         msg.body = strip_tags(message)
                         msg.html = message
 
-                        uploaded_to_mongo = []
-
                         for file in attachments:
                             if allowed_file(file.filename):
                                 filename = secure_filename(file.filename)
@@ -542,7 +569,6 @@ def index():
 
     return render_template('index.html', sender_email=SENDER_EMAIL, wait_time=WAIT_TIME)
 
-
 @app.route('/upload-image', methods=['POST'])
 def upload_image():
     incoming_file = request.files.get('file') or request.files.get('upload')
@@ -567,13 +593,5 @@ def download_report():
         flash(f"❌ Error downloading report: {e}", "danger")
         return redirect('/')
 
-
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
-
-# if __name__ == '__main__':
-#     app.run(debug=True)
-
-
-
-    # {"name": "Raj05", "email": "raajkachhadiya2005@gmail.com", "password": "abcdef"}
