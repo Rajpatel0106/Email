@@ -134,28 +134,6 @@
     }
   });
 </script>
-<script>
-  // MongoDB connection check
-<!--  fetch("/api/mongo-status")-->
-<!--    .then(response => response.json())-->
-    .then(data => {
-      if (data.status === "connected") {
-        console.log("✅ MongoDB is connected.");
-      } else {
-        console.error("❌ MongoDB connection failed:", data.message);
-      }
-    })
-    .catch(err => console.error("❌ Failed to check MongoDB status:", err));
-
-  // ✅ Search all alerts and look for MongoDB upload messages
-  document.querySelectorAll('.alert').forEach(alert => {
-    const text = alert.textContent.trim();
-<!--    if (text.startsWith("MONGO_UPLOAD::")) {-->
-      const files = text.replace("MONGO_UPLOAD::", "").split(',');
-      console.log("📦 Files uploaded to MongoDB:", files);
-    }
-  });
-</script>
 </body>
 </html>
 

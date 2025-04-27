@@ -10,14 +10,14 @@ import secrets
 import mimetypes
 import dns.resolver
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 from flask_ckeditor import CKEditor
 from flask_mail import Mail, Message
 from email.mime.image import MIMEImage
 from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, session, send_file, request, redirect, flash, jsonify, send_from_directory
+from flask import Flask, render_template, session, send_file, request, url_for
+from flask import current_app, flash, jsonify, send_from_directory, redirect
 
 
 
@@ -54,25 +54,36 @@ app.config.update(
 app.config['SESSION_TYPE'] = 'filesystem'
 
 
-MEMORY_FILE = 'memory.json'
+USER_FILE  = 'users.json'
 
 def load_users():
     try:
-        with open('users.json', 'r') as file:
-            # Attempt to load JSON data
-            users = json.load(file)
-            return users
-    except json.JSONDecodeError:
-        print("Error: Invalid JSON format in users.json")
-        return []  # Return an empty list if JSON is invalid
+        with open(USER_FILE, 'r') as f:
+            users = json.load(f)
     except FileNotFoundError:
-        print("Error: users.json file not found. Initializing with an empty list.")
-        return []  # Return an empty list if file is missing
+        print("Users file not found, creating a new one.")
+        users = []
+    except json.JSONDecodeError:
+        print("Error decoding JSON. File might be corrupted.")
+        users = []
+    return users
 
 
 def save_users(users):
-    with open(MEMORY_FILE, 'w') as f:
-        json.dump({'users': users}, f, indent=2)
+    try:
+        with open(USER_FILE, 'w') as f:
+            json.dump(users, f, indent=4)
+    except IOError as e:
+        print(f"Error saving users: {e}")
+
+def get_all_users():
+    users = []
+    with open('users.csv', 'r', newline='') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            users.append(row)
+    return users
+
 
 def get_user(email):
     users = load_users()
@@ -194,53 +205,67 @@ def get_emails_from_csv(path):
             })
         return result
 
+def read_users():
+    if os.path.exists(USER_FILE):
+        with open(USER_FILE, 'r') as file:
+            return json.load(file)
+    else:
+        return []
+
+def write_users(users):
+    with open(USER_FILE, 'w') as file:
+        json.dump(users, file, indent=4)
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
-        name = request.form['name'].strip()
-        email = request.form['email'].strip().lower()
+        name = request.form['name']
+        email = request.form['email']
         password = request.form['password']
-        confirm = request.form['confirm_password']
+        confirm_password = request.form['confirm_password']
 
-        if get_user(email):
-            flash("Mail Address already exists", 'danger')
+        if password != confirm_password:
+            flash("Passwords do not match", "error")
             return redirect('/signup')
 
-        if password != confirm:
-            flash("Passwords do not match", 'danger')
+        users = read_users()
+
+        # Check if email already exists
+        if any(user['email'] == email for user in users):
+            flash("Mail Address already exists", "error")
             return redirect('/signup')
 
-        hashed_pw = generate_password_hash(password)
-        users = load_users()
-        users.append({
-            "name": name,
-            "email": email,
-            "password_hash": hashed_pw
-        })
-        save_users(users)
+        # Save new user
+        new_user = {"name": name, "email": email, "password": password}
+        users.append(new_user)
+        write_users(users)
 
-        flash("Signup successful! Please login.", 'success')
+        flash("Signup successful! Please login.", "success")
         return redirect('/login')
 
-    return render_template("signup.html")
+    return render_template('signup.html')
+
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form['email'].strip().lower()
+        email = request.form['email']
         password = request.form['password']
 
-        user = get_user(email)
-        if not user or not check_password_hash(user['password_hash'], password):
-            flash("Mail ID and password mismatch", 'danger')
+        users = load_users()  # load users correctly from JSON
+
+        user = next((user for user in users if user['email'] == email and user['password'] == password), None)
+
+        if user:
+            # login success
+            session['user'] = user['name']
+            return redirect('/')
+        else:
+            flash('Invalid credentials!', 'danger')
             return redirect('/login')
 
-        session['user'] = user['email']
-        flash("Login successful", 'success')
-        return redirect('/')
-
-    return render_template("login.html")
+    return render_template('login.html')
 
 
 @app.route('/logout')
@@ -249,85 +274,101 @@ def logout():
     flash("Logged out.", "info")
     return redirect('/login')
 
+def generate_otp():
+    return str(random.randint(100000, 999999))  # Generates a 6-digit OTP
+
+def send_otp_email(email, otp):
+    msg = Message(
+        subject="Your OTP for Password Reset",
+        recipients=[email],
+        body=f"Your OTP is: {otp}",
+    )
+    with app.app_context():
+        mail.send(msg)
+
+
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
-        email = request.form['email'].strip().lower()
-        user = get_user(email)
-        if not user:
-            flash("Mail ID does not exist", "danger")
-            return redirect('/forgot-password')
+        email = request.form['email']
+        print(f"Requested email: {email}")
 
-        otp = str(random.randint(100000, 999999))
-        expiry = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
-        user['otp'] = otp
-        user['otp_expiry'] = expiry
-        update_user(user)
+        # Load users from the JSON file
+        users = load_users()
+        print(f"Loaded users: {users}")
 
-        msg = Message("Password Reset OTP", recipients=[email])
-        msg.body = f"Your OTP for password reset is: {otp}"
-        mail.send(msg)
+        # Check if the email exists in the list of users
+        user = next((user for user in users if user['email'].strip().lower() == email.strip().lower()), None)
+        if user:
+            print(f"User found: {user}")
+            otp = generate_otp()
+            send_otp_email(user['email'], otp)
+            session['verification_code'] = otp
+            session['reset_email'] = user['email']
+            return redirect(url_for('verify_code'))
+        else:
+            print("Email not found in the system")
+            flash("Email not found in the system", "error")
+            return redirect(url_for('forgot_password'))
 
-        flash("OTP sent to your email.", "info")
-        session['otp_email'] = email
-        return redirect('/reset-password')
-
-    return render_template("forgot_password.html")
+    return render_template('forgot_password.html')
 
 
-@app.route('/reset-password', methods=['GET', 'POST'])
-def reset_password():
-    email = session.get('otp_email')
-    if not email:
-        flash("Session expired. Try again.", "danger")
-        return redirect('/forgot-password')
 
-    user = get_user(email)
-    if not user:
-        flash("Mail ID does not exist", "danger")
-        return redirect('/forgot-password')
-
+@app.route('/verify_code', methods=['GET', 'POST'])
+def verify_code():
     if request.method == 'POST':
-        otp = request.form['otp'].strip()
-        new_pw = request.form['new_password']
-        confirm_pw = request.form['confirm_password']
+        code = request.form['code']
 
-        if otp != user.get('otp'):
-            flash("Invalid OTP", "danger")
-            return redirect('/reset-password')
+        # Validate the OTP entered by the user
+        if code != session.get('verification_code'):
+            flash("Invalid code. Try again.", "error")
+            return redirect('/verify_code')
 
-        expiry_str = user.get('otp_expiry')
-        if not expiry_str or datetime.utcnow() > datetime.fromisoformat(expiry_str):
-            flash("OTP expired. Request a new one.", "danger")
-            return redirect('/forgot-password')
+        return redirect('/reset_password')
 
-        if new_pw != confirm_pw:
-            flash("Passwords do not match", "danger")
-            return redirect('/reset-password')
+    return render_template('verify_code.html')
 
-        user['password_hash'] = generate_password_hash(new_pw)
-        user.pop('otp', None)
-        user.pop('otp_expiry', None)
-        update_user(user)
 
-        session.pop('otp_email', None)
+@app.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+
+        if new_password != confirm_password:
+            flash("Passwords do not match", "error")
+            return redirect('/reset_password')
+
+        email = session.get('reset_email')
+        users = read_users()
+
+        for user in users:
+            if user['email'] == email:
+                user['password'] = new_password
+
+        write_users(users)
+
         flash("Password reset successful! Please login.", "success")
         return redirect('/login')
 
-    return render_template("reset_password.html")
+    return render_template('reset_password.html')
 
 
+@app.route("/test-attachment-upload", methods=['POST'])
+def test_attachment_upload():
+    uploaded_file = request.files['file']
+    if uploaded_file:
+        filename = secure_filename(uploaded_file.filename)
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
 
+        try:
+            uploaded_file.save(file_path)  # Save file locally
+            return f"✅ File uploaded successfully: {filename}"
+        except Exception as e:
+            return f"❌ Upload failed: {e}"
 
-@app.route("/test-attachment-upload")
-def test_attachment_upload(fs=None):
-    from io import BytesIO
-    try:
-        file_id = fs.put(BytesIO(b"Test attachment content"), filename="sample_test.txt")
-        print(f"Saved file with _id: {file_id}")
-        return f"✅ Uploaded! ID: {file_id}"
-    except Exception as e:
-        return f"❌ Upload failed: {e}"
+    return "❌ No file uploaded"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -391,20 +432,6 @@ def index():
                         else:
                             save_invalid_email(to_email, reason)
                             invalid_to.append((to_email, reason))
-
-                # Validate CC
-                for cc in cc_emails:
-                    if cc in invalid_emails:
-                        invalid_cc.append((cc, 'Previously invalid'))
-                    else:
-                        valid, reason = is_valid_email(cc)
-                        if valid:
-                            valid_cc.append(cc)
-                            remove_invalid_email(cc)
-                        else:
-                            save_invalid_email(cc, reason)
-                            invalid_cc.append((cc, reason))
-
                 # Validate CC
                 for cc in cc_emails:
                     if cc in invalid_emails:
@@ -530,7 +557,7 @@ def upload_image():
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/download-report')
 def download_report():
@@ -549,3 +576,4 @@ if __name__ == '__main__':
 
 
 
+    # {"name": "Raj05", "email": "raajkachhadiya2005@gmail.com", "password": "abcdef"}
