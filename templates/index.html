@@ -11,68 +11,86 @@
   <script src="https://unpkg.com/filepond-plugin-file-encode/dist/filepond-plugin-file-encode.js"></script>
   <script src="https://unpkg.com/filepond-plugin-file-validate-size/dist/filepond-plugin-file-validate-size.js"></script>
 </head>
-<style>
-  body {
-     font-family: Arial, sans-serif;
-     background-color: gray;
-     margin: 0;
-     padding: 20px;
-  }
-  .container {
-     max-width: 800px;
-     margin: 0 auto;
-     padding: 30px;
-     background-color: lightyellow;
-     border-radius: 8px;
-     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  }
-  label {
-     font-weight: bold;
-     margin-top: 10px;
-     display: block;
-  }
-  input, textarea {
-     width: 100%;
-     padding: 10px;
-     margin-top: 5px;
-     border: 1px solid #ccc;
-     border-radius: 4px;
-  }
-  .submit-btn {
-     margin-top: 20px;
-     background: #28a745;
-     color: white;
-     padding: 12px;
-     border: none;
-     width: 100%;
-     font-size: 16px;
-     cursor: pointer;
-     border-radius: 4px;
-  }
-{#
-.download-btn {
-   margin-top: 20px;
-   background: #007bff;
-   color: white;
-   padding: 10px;
-   border: blue;
-   width: 20%;
-   font-size: 15px;
-   cursor: pointer;
-   border-radius: 10px;
-}
-#}
-  .alert {
-     margin: 10px 0;
-     padding: 10px;
-     border-radius: 4px;
-  }
-  .success { background: #d4edda; color: #155724; }
-  .danger { background: #f8d7da; color: #721c24; }
-  .info    { background: #d1ecf1; color: #0c5460; }
-</style>
+  <style>
+    body {
+       font-family: Arial, sans-serif;
+       background-color: gray;
+       margin: 0;
+       padding: 20px;
+    }
+    .container {
+       max-width: 800px;
+       margin: 0 auto;
+       padding: 30px;
+       background-color: lightyellow;
+       border-radius: 8px;
+       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    label {
+       font-weight: bold;
+       margin-top: 10px;
+       display: block;
+    }
+    input, textarea {
+       width: 100%;
+       padding: 10px;
+       margin-top: 5px;
+       border: 1px solid #ccc;
+       border-radius: 4px;
+    }
+    .submit-btn {
+       margin-top: 20px;
+       background: #28a745;
+       color: white;
+       padding: 12px;
+       border: none;
+       width: 100%;
+       font-size: 16px;
+       cursor: pointer;
+       border-radius: 4px;
+    }
+    .logout-btn {
+       background: #dc3545;
+       color: white;
+       padding: 8px 16px;
+       border: none;
+       width: 100%;
+       font-size: 16px;
+       cursor: pointer;
+       border-radius: 4px;
+       text-decoration: none;"
+    }
+    {#
+    .download-btn {
+       margin-top: 20px;
+       background: #007bff;
+       color: white;
+       padding: 10px;
+       border: blue;
+       width: 20%;
+       font-size: 15px;
+       cursor: pointer;
+       border-radius: 10px;
+    }
+    #}
+    .alert {
+       margin: 10px 0;
+       padding: 10px;
+       border-radius: 4px;
+    }
+    .success { background: #d4edda; color: #155724; }
+    .danger { background: #f8d7da; color: #721c24; }
+    .info    { background: #d1ecf1; color: #0c5460; }
+    .warning { background: #fff3cd; color: #856404; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
 <body>
 <div class="container">
+  {% if session.get('user') %}
+  <div style="text-align: right; margin-bottom: 10px;">
+    <a href="{{ url_for('logout') }}", class="logout-btn">Logout</a>
+  </div>
+{% endif %}
   <h1>Email Sending App</h1>
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}

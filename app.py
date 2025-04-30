@@ -17,8 +17,8 @@ from flask_ckeditor import CKEditor
 from flask_mail import Mail, Message
 from email.mime.image import MIMEImage
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, session, send_file, request
-from flask import current_app, flash, jsonify, send_from_directory, redirect
+from flask import (Flask, render_template, session, send_file, request,
+                   current_app, flash, jsonify, send_from_directory, redirect)
 
 
 # Load environment variables
@@ -44,12 +44,12 @@ app.config.update(
     MAIL_PASSWORD=SENDER_PASSWORD,
     MAIL_USE_TLS=True,
     MAIL_DEFAULT_SENDER=SENDER_EMAIL,
+    SESSION_TYPE='filesystem',
     UPLOAD_FOLDER='uploads',
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
     CKEDITOR_SERVE_LOCAL=True,
     CKEDITOR_HEIGHT=400
 )
-app.config['SESSION_TYPE'] = 'filesystem'
 
 USER_FILE  = 'users.json'
 
@@ -93,7 +93,8 @@ def update_user(updated_user):
             return
 
 mail = Mail(app)
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'zip', 'avif', 'ico', 'heic', 'webp', 'txt', 'xlsx', 'csv', 'pptx'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'zip',
+                      'avif', 'ico', 'heic', 'webp', 'txt', 'xlsx', 'csv', 'pptx'}
 
 INVALID_MAILS_PATH = "Invalid_mails.csv"
 REPORTS_DIR = "reports"
@@ -243,11 +244,8 @@ def login():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
-
         users = load_users()  # load users correctly from JSON
-
         user = next((user for user in users if user['email'] == email and user['password'] == password), None)
-
         if user:
             # login success
             session['user'] = user['name']
@@ -255,7 +253,6 @@ def login():
         else:
             flash('Invalid credentials!', 'danger')
             return redirect('/login')
-
     return render_template('login.html')
 
 @app.route('/logout')
@@ -280,24 +277,20 @@ def send_otp_email(email, otp):
 def forgot_password():
     if request.method == 'POST':
         email = request.form['email'].strip()
-
         if not email:
             flash('Please enter your email.', 'error')
             return redirect('/forgot-password')
-
         try:
             with open('users.json', 'r') as f:
                 users = json.load(f)
         except FileNotFoundError:
             users = []
-
         # Check if email exists
         user_found = False
         for user in users:
             if user['email'] == email:
                 user_found = True
                 break
-
         if not user_found:
             flash('Email does not exist.', 'error')
             return redirect('/forgot-password')
@@ -307,7 +300,6 @@ def forgot_password():
         session['otp'] = otp
         session['reset_email'] = email
         print("forgot ses:", session)
-
         # Send OTP via email
         try:
             msg = Message('Password Reset OTP', sender=os.getenv('EMAIL_SENDER'), recipients=[email])
@@ -319,7 +311,6 @@ def forgot_password():
 
         flash('OTP has been sent to your email.', 'success')
         return redirect('/verify_code')
-
     return render_template('forgot_password.html')
 
 @app.route('/verify_code', methods=['GET', 'POST'])
